@@ -24,4 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "OwnVideoPlayer"
 include(":app")
- 
+include(":OwnVideoPlayer")
