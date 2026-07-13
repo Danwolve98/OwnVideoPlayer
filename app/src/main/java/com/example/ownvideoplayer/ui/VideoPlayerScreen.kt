@@ -1,6 +1,5 @@
 package com.example.ownvideoplayer.ui
 
-import android.content.res.Configuration
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -15,7 +14,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -23,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.danwolve.ownvideoplayer.player.VideoPlayerViewModel
 import com.danwolve.ownvideoplayer.ui.OwnVideoPlayer
 import com.danwolve.ownvideoplayer.ui.FullScreenMode
+import com.example.ownvideoplayer.R
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -44,11 +43,9 @@ fun VideoPlayerScreen(
         }
     }
 
-    // Independent load for this screen
+    // Independent load for this screen (Local Video)
     LaunchedEffect(Unit) {
-        viewModel.loadVideo(
-            "https://museusvalenciapre.grupotecopy.es/sites/default/files/2024-10/BEACON%2050%20%2B%20%20Audio%20Benlliure%2042%20%2B%20IMG.mp4".toUri()
-        )
+        viewModel.loadRawResource(R.raw.michael)
     }
 
     val controller = remember {

@@ -6,6 +6,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -16,6 +17,17 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                15000, // minBufferMs
+                50000, // maxBufferMs
+                1000,  // bufferForPlaybackMs
+                1500   // bufferForPlaybackAfterRebufferMs
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
         val player = ExoPlayer.Builder(this)
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -24,12 +36,9 @@ class PlaybackService : MediaSessionService() {
                     .build(),
                 true
             )
-            .setLoadControl(
-                androidx.media3.exoplayer.DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(15_000, 50_000, 1_000, 2_000)
-                    .setPrioritizeTimeOverSizeThresholds(true)
-                    .build()
-            )
+            .setLoadControl(loadControl)
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
         val intent = packageManager.getLaunchIntentForPackage(packageName)

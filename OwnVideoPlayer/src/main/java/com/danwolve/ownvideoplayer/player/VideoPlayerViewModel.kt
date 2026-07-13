@@ -14,6 +14,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import androidx.media3.datasource.RawResourceDataSource
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +35,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var progressJob: Job? = null
     private var controlsTimerJob: Job? = null
+    private var loadJob: Job? = null
+    private var bufferingWatchdogJob: Job? = null
     private var isFirstLoad = true
     private var lastUri: Uri? = null
 
@@ -57,6 +60,17 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun setupPlayerListener(player: Player) {
         player.addListener(object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (events.containsAny(Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_PLAY_WHEN_READY_CHANGED)) {
+                    val isBuffering = player.playbackState == Player.STATE_BUFFERING
+                    if (isBuffering) {
+                        startBufferingWatchdog()
+                    } else {
+                        bufferingWatchdogJob?.cancel()
+                    }
+                }
+            }
+
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 val message = when (error.errorCode) {
                     androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
@@ -67,6 +81,9 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     else -> "Error al cargar el video: ${error.errorCodeName}"
                 }
                 _uiState.update { it.copy(errorMessage = message, isBuffering = false) }
+                
+                // On fatal error, try to reset player state
+                player.prepare()
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -83,17 +100,36 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 val buffering = playbackState == Player.STATE_BUFFERING
+                val duration = if (player.duration == androidx.media3.common.C.TIME_UNSET) 0L else player.duration.coerceAtLeast(0L)
+
                 _uiState.update {
                     it.copy(
                         playbackState = playbackState,
                         isBuffering = buffering,
-                        duration = player.duration.coerceAtLeast(0L)
+                        duration = duration,
+                        currentPosition = if (buffering || playbackState == Player.STATE_IDLE) it.currentPosition else player.currentPosition
                     )
                 }
 
-                if (playbackState == Player.STATE_READY && isFirstLoad) {
-                    isFirstLoad = false
+                if (playbackState == Player.STATE_READY) {
+                    if (isFirstLoad) {
+                        isFirstLoad = false
+                    }
                 }
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    _uiState.update { it.copy(currentPosition = newPosition.positionMs) }
+                }
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                _uiState.update { it.copy(playWhenReady = playWhenReady) }
             }
 
             override fun onVolumeChanged(volume: Float) {
@@ -117,30 +153,40 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun loadVideo(uri: Uri, notificationInfo: NotificationInfo? = null) {
         lastUri = uri
-        viewModelScope.launch {
-            // Wait for player to be available
-            while (_playerFlow.value == null) {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            // Wait for player to be available with a timeout
+            var attempts = 0
+            while (_playerFlow.value == null && attempts < 50) {
                 delay(100.milliseconds)
+                attempts++
             }
             
             val player = _playerFlow.value ?: return@launch
             
-            // Si el video ya es el mismo y NO hay error, no hacemos nada.
+            // Si el video ya es el mismo, comprobamos si hay que forzar la carga
             val currentUri = player.currentMediaItem?.localConfiguration?.uri
-            if (currentUri == uri && _uiState.value.errorMessage == null) {
+            val isSameUri = currentUri == uri
+            
+            if (isSameUri && _uiState.value.errorMessage == null && player.playbackState != Player.STATE_IDLE && player.playerError == null) {
+                if (player.playbackState == Player.STATE_ENDED) {
+                    player.seekTo(0)
+                }
+                player.play()
                 return@launch
             }
 
-            _uiState.update { it.copy(errorMessage = null) }
+            _uiState.update { it.copy(errorMessage = null, isBuffering = true) }
 
             // Solo comprobamos internet si vamos a cargar un video nuevo y es remoto
-            if (!isNetworkAvailable() && uri.scheme?.startsWith("http") == true) {
-                _uiState.update { it.copy(errorMessage = "No tienes conexión a internet") }
+            if (uri.scheme?.startsWith("http") == true && !isNetworkAvailable()) {
+                _uiState.update { it.copy(errorMessage = "No tienes conexión a internet", isBuffering = false) }
                 return@launch
             }
 
             val mediaItem = MediaItem.Builder()
                 .setUri(uri)
+                .setMediaId(uri.toString())
                 .setMediaMetadata(
                     androidx.media3.common.MediaMetadata.Builder()
                         .setTitle(notificationInfo?.title ?: "Video Player")
@@ -149,10 +195,20 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         .build()
                 )
                 .build()
+            
+            player.pause()
+            player.stop()
+            player.clearMediaItems()
             player.setMediaItem(mediaItem)
+            player.seekTo(0)
             player.prepare()
             player.play()
         }
+    }
+
+    fun loadRawResource(resourceId: Int, notificationInfo: NotificationInfo? = null) {
+        val uri = RawResourceDataSource.buildRawResourceUri(resourceId)
+        loadVideo(uri, notificationInfo)
     }
 
     fun playPause() {
@@ -164,15 +220,22 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         } else {
             player?.let {
-                if (it.isPlaying) it.pause() else it.play()
+                if (it.playWhenReady) it.pause() else it.play()
             }
         }
         resetControlsTimer()
     }
 
     fun seekTo(position: Long) {
-        player?.seekTo(position)
-        _uiState.update { it.copy(currentPosition = position) }
+        player?.let {
+            it.seekTo(position)
+            _uiState.update { state -> 
+                state.copy(
+                    currentPosition = position,
+                    isBuffering = true
+                ) 
+            }
+        }
         resetControlsTimer()
     }
 
@@ -180,7 +243,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         player?.let { 
             val newPos = (it.currentPosition - 10000).coerceAtLeast(0)
             it.seekTo(newPos)
-            _uiState.update { state -> state.copy(currentPosition = newPos) }
+            _uiState.update { state -> state.copy(currentPosition = newPos, isBuffering = true) }
         }
         resetControlsTimer()
     }
@@ -189,7 +252,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         player?.let { 
             val newPos = (it.currentPosition + 10000).coerceAtMost(it.duration)
             it.seekTo(newPos)
-            _uiState.update { state -> state.copy(currentPosition = newPos) }
+            _uiState.update { state -> state.copy(currentPosition = newPos, isBuffering = true) }
         }
         resetControlsTimer()
     }
@@ -224,6 +287,20 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun startBufferingWatchdog() {
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = viewModelScope.launch {
+            delay(10000.milliseconds) // Give it 10 seconds
+            if (_uiState.value.isBuffering) {
+                player?.let { p ->
+                    if (p.playbackState == Player.STATE_BUFFERING) {
+                        p.prepare() // Re-prepare to try and kick-start it
+                    }
+                }
+            }
+        }
+    }
+
     private fun resetControlsTimer() {
         controlsTimerJob?.cancel()
         controlsTimerJob = viewModelScope.launch {
@@ -244,15 +321,17 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         progressJob = viewModelScope.launch {
             while (isActive) {
                 player?.let { p ->
-                    val pos = p.currentPosition
-                    val buf = p.bufferedPosition
-                    val dur = p.duration.coerceAtLeast(0L)
-                    _uiState.update { 
-                        it.copy(
-                            currentPosition = pos,
-                            bufferedPosition = buf,
-                            duration = dur
-                        )
+                    if (p.playbackState != Player.STATE_BUFFERING) {
+                        val pos = p.currentPosition
+                        val buf = p.bufferedPosition
+                        val dur = p.duration.coerceAtLeast(0L)
+                        _uiState.update {
+                            it.copy(
+                                currentPosition = pos,
+                                bufferedPosition = buf,
+                                duration = dur
+                            )
+                        }
                     }
                 }
                 delay(200.milliseconds)
@@ -270,6 +349,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         stopPlayback()
         stopProgressTracker()
         controlsTimerJob?.cancel()
+        loadJob?.cancel()
+        bufferingWatchdogJob?.cancel()
         controllerFuture?.let {
             MediaController.releaseFuture(it)
         }
@@ -279,6 +360,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 data class VideoPlayerUiState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
+    val playWhenReady: Boolean = false,
     val currentPosition: Long = 0L,
     val bufferedPosition: Long = 0L,
     val duration: Long = 0L,

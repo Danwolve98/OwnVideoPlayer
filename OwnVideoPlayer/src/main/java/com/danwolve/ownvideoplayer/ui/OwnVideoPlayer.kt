@@ -202,12 +202,12 @@ fun OwnVideoControlsOverlay(
 
     val animatedSliderValue by animateFloatAsState(
         targetValue = sliderValue,
-        animationSpec = if (isDragging) snap() else tween(durationMillis = 300),
+        animationSpec = if (isDragging) snap() else tween(durationMillis = 100),
         label = "SliderAnimation"
     )
 
-    LaunchedEffect(uiState.isBuffering, isDragging) {
-        if (!uiState.isBuffering && !isDragging) {
+    LaunchedEffect(uiState.isBuffering, uiState.isPlaying, isDragging, uiState.playbackState) {
+        if (!uiState.isBuffering && !isDragging && uiState.playbackState != androidx.media3.common.Player.STATE_BUFFERING) {
             seekingPosition = null
         }
     }
@@ -248,12 +248,13 @@ fun OwnVideoControlsOverlay(
                 IconButton(onClick = { seekingPosition = (sliderValue - 10000).coerceAtLeast(0f); onRewind() }) {
                     Icon(Icons.Rounded.Replay10, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
                 }
-                if (!uiState.isBuffering) {
-                    IconButton(onClick = onPlayPause) {
-                        Icon(if (uiState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(56.dp))
-                    }
-                } else {
-                    Spacer(modifier = Modifier.size(64.dp))
+                IconButton(onClick = onPlayPause) {
+                    Icon(
+                        if (uiState.playWhenReady) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(56.dp)
+                    )
                 }
                 IconButton(onClick = { seekingPosition = (sliderValue + 10000).coerceAtMost(uiState.duration.toFloat()); onFastForward() }) {
                     Icon(Icons.Rounded.Forward10, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
