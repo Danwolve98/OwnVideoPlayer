@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
-import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -25,9 +24,9 @@ import androidx.core.net.toUri
 
 @OptIn(UnstableApi::class)
 class VideoPlayerViewModel(application: Application) : AndroidViewModel(application) {
-
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private val _playerFlow = MutableStateFlow<Player?>(null)
+    val playerFlow: StateFlow<Player?> = _playerFlow.asStateFlow()
     val player: Player? get() = _playerFlow.value
 
     private val _uiState = MutableStateFlow(VideoPlayerUiState())
@@ -36,6 +35,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var progressJob: Job? = null
     private var controlsTimerJob: Job? = null
     private var isFirstLoad = true
+    private var lastUri: Uri? = null
 
     init {
         initializeController()
@@ -57,6 +57,18 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun setupPlayerListener(player: Player) {
         player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val message = when (error.errorCode) {
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "No tienes conexión a internet"
+                    androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "Error de hardware: No se puede decodificar el video"
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "El archivo de video no existe"
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "Error del servidor (HTTP ${error.errorCode})"
+                    else -> "Error al cargar el video: ${error.errorCodeName}"
+                }
+                _uiState.update { it.copy(errorMessage = message, isBuffering = false) }
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _uiState.update { it.copy(isPlaying = isPlaying) }
                 if (isPlaying) {
@@ -89,7 +101,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
 
             override fun onTracksChanged(tracks: Tracks) {
-                updateAvailableQualities(tracks)
+                // Quality selection removed
             }
 
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
@@ -103,36 +115,8 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         })
     }
 
-    private fun updateAvailableQualities(tracks: Tracks) {
-        val qualities = mutableListOf<VideoQuality>()
-        
-        for (group in tracks.groups) {
-            if (group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO) {
-                for (i in 0 until group.length) {
-                    val format = group.getTrackFormat(i)
-                    if (format.height != androidx.media3.common.Format.NO_VALUE) {
-                        val label = "${format.height}p"
-                        if (qualities.none { it.label == label }) {
-                            qualities.add(VideoQuality(label, format.height, group, i))
-                        }
-                    }
-                }
-            }
-        }
-        
-        val sortedQualities = qualities.sortedByDescending { it.height ?: 0 }.toMutableList()
-        val autoQuality = VideoQuality("Auto", null)
-        sortedQualities.add(0, autoQuality) // "Auto" at the top
-        
-        _uiState.update { state ->
-            state.copy(
-                availableQualities = sortedQualities,
-                selectedQuality = state.selectedQuality ?: autoQuality
-            )
-        }
-    }
-
     fun loadVideo(uri: Uri, notificationInfo: NotificationInfo? = null) {
+        lastUri = uri
         viewModelScope.launch {
             // Wait for player to be available
             while (_playerFlow.value == null) {
@@ -140,6 +124,21 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
             
             val player = _playerFlow.value ?: return@launch
+            
+            // Si el video ya es el mismo y NO hay error, no hacemos nada.
+            val currentUri = player.currentMediaItem?.localConfiguration?.uri
+            if (currentUri == uri && _uiState.value.errorMessage == null) {
+                return@launch
+            }
+
+            _uiState.update { it.copy(errorMessage = null) }
+
+            // Solo comprobamos internet si vamos a cargar un video nuevo y es remoto
+            if (!isNetworkAvailable() && uri.scheme?.startsWith("http") == true) {
+                _uiState.update { it.copy(errorMessage = "No tienes conexión a internet") }
+                return@launch
+            }
+
             val mediaItem = MediaItem.Builder()
                 .setUri(uri)
                 .setMediaMetadata(
@@ -157,24 +156,41 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playPause() {
-        player?.let {
-            if (it.isPlaying) it.pause() else it.play()
+        val currentState = _uiState.value
+        if (currentState.errorMessage != null) {
+            // Si hay un error, el botón de play actúa como reintento usando la última URI
+            lastUri?.let { uri ->
+                loadVideo(uri)
+            }
+        } else {
+            player?.let {
+                if (it.isPlaying) it.pause() else it.play()
+            }
         }
         resetControlsTimer()
     }
 
     fun seekTo(position: Long) {
         player?.seekTo(position)
+        _uiState.update { it.copy(currentPosition = position) }
         resetControlsTimer()
     }
 
     fun rewind() {
-        player?.let { it.seekTo((it.currentPosition - 10000).coerceAtLeast(0)) }
+        player?.let { 
+            val newPos = (it.currentPosition - 10000).coerceAtLeast(0)
+            it.seekTo(newPos)
+            _uiState.update { state -> state.copy(currentPosition = newPos) }
+        }
         resetControlsTimer()
     }
 
     fun fastForward() {
-        player?.let { it.seekTo((it.currentPosition + 10000).coerceAtMost(it.duration)) }
+        player?.let { 
+            val newPos = (it.currentPosition + 10000).coerceAtMost(it.duration)
+            it.seekTo(newPos)
+            _uiState.update { state -> state.copy(currentPosition = newPos) }
+        }
         resetControlsTimer()
     }
 
@@ -201,19 +217,10 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun setQuality(quality: VideoQuality) {
-        player?.let { p ->
-            if (quality.height == null) {
-                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().clearOverrides().build()
-            } else {
-                quality.group?.let { group ->
-                    p.trackSelectionParameters = p.trackSelectionParameters
-                        .buildUpon()
-                        .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, quality.index))
-                        .build()
-                }
-            }
-            _uiState.update { it.copy(selectedQuality = quality) }
+    fun stopPlayback() {
+        player?.let {
+            it.stop()
+            it.clearMediaItems()
         }
     }
 
@@ -225,19 +232,30 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getApplication<Application>().getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
     private fun startProgressTracker() {
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (isActive) {
                 player?.let { p ->
+                    val pos = p.currentPosition
+                    val buf = p.bufferedPosition
+                    val dur = p.duration.coerceAtLeast(0L)
                     _uiState.update { 
                         it.copy(
-                            currentPosition = p.currentPosition,
-                            duration = p.duration.coerceAtLeast(0L)
+                            currentPosition = pos,
+                            bufferedPosition = buf,
+                            duration = dur
                         )
                     }
                 }
-                delay(500.milliseconds)
+                delay(200.milliseconds)
             }
         }
     }
@@ -249,6 +267,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     override fun onCleared() {
         super.onCleared()
+        stopPlayback()
         stopProgressTracker()
         controlsTimerJob?.cancel()
         controllerFuture?.let {
@@ -261,21 +280,14 @@ data class VideoPlayerUiState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val currentPosition: Long = 0L,
+    val bufferedPosition: Long = 0L,
     val duration: Long = 0L,
     val playbackState: Int = Player.STATE_IDLE,
     val isMuted: Boolean = false,
-    val availableQualities: List<VideoQuality> = emptyList(),
-    val selectedQuality: VideoQuality? = null,
     val isFullScreen: Boolean = false,
     val isControlsVisible: Boolean = false,
-    val videoAspectRatio: Float = 16f / 9f
-)
-
-data class VideoQuality(
-    val label: String,
-    val height: Int?,
-    val group: Tracks.Group? = null,
-    val index: Int = 0
+    val videoAspectRatio: Float = 16f / 9f,
+    val errorMessage: String? = null
 )
 
 data class NotificationInfo(

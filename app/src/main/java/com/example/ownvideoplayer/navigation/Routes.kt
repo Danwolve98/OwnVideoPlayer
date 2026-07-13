@@ -5,7 +5,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 sealed interface Route {
     @Serializable
-    data object Player : Route
+    data object Menu : Route
+
+    @Serializable
+    data object EmbeddedPlayer : Route
 
     @Serializable
     data object FullScreenPlayer : Route
