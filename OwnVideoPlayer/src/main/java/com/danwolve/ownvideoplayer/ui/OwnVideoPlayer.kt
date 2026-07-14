@@ -21,10 +21,23 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.ui.compose.PlayerSurface
 import com.danwolve.ownvideoplayer.player.VideoPlayerUiState
+import com.danwolve.ownvideoplayer.player.VideoPlayerViewModel
+import com.danwolve.ownvideoplayer.player.NotificationInfo
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.net.toUri
+import androidx.annotation.RawRes
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import java.util.Locale
+
+/**
+ * Representa la fuente de video para el reproductor.
+ */
+sealed class VideoSource {
+    data class Url(val url: String) : VideoSource()
+    data class Raw(@param:RawRes val resId: Int) : VideoSource()
+}
 
 enum class FullScreenMode {
     SYSTEM_UI, // Hides system bars in current screen
@@ -37,8 +50,52 @@ fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
+/**
+ * Reproductor de video simplificado que gestiona su propio estado y ViewModel.
+ * Ideal para integración rápida en cualquier parte de la UI.
+ *
+ * @param source Fuente del video (URL o Recurso Raw).
+ * @param modifier Modificador para el contenedor del reproductor.
+ * @param notificationInfo Información opcional para la notificación de medios.
+ * @param isControlsEnabled Si los controles están habilitados.
+ * @param fullScreenMode Modo de pantalla completa (Diálogo o ocultar UI del sistema).
+ */
 @Composable
 fun OwnVideoPlayer(
+    source: VideoSource,
+    modifier: Modifier = Modifier,
+    notificationInfo: NotificationInfo? = null,
+    isControlsEnabled: Boolean = true,
+    fullScreenMode: FullScreenMode = FullScreenMode.SYSTEM_UI
+) {
+    val viewModel: VideoPlayerViewModel = viewModel(key = source.toString())
+    val uiState by viewModel.uiState.collectAsState()
+    val player by viewModel.playerFlow.collectAsState()
+
+    LaunchedEffect(source) {
+        when (source) {
+            is VideoSource.Url -> viewModel.loadVideo(source.url.toUri(), notificationInfo)
+            is VideoSource.Raw -> viewModel.loadRawResource(source.resId, notificationInfo)
+        }
+    }
+
+    OwnVideoPlayerBase(
+        modifier = modifier,
+        player = player,
+        uiState = uiState,
+        onPlayPause = { viewModel.playPause() },
+        onRewind = { viewModel.rewind() },
+        onFastForward = { viewModel.fastForward() },
+        onSeek = { viewModel.seekTo(it) },
+        onToggleFullScreen = { viewModel.toggleFullScreen() },
+        onToggleControls = { viewModel.toggleControls() },
+        isControlsEnabled = isControlsEnabled,
+        fullScreenMode = fullScreenMode
+    )
+}
+
+@Composable
+fun OwnVideoPlayerBase(
     modifier: Modifier = Modifier,
     videoModifier: Modifier = Modifier,
     player: androidx.media3.common.Player?,

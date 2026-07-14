@@ -184,16 +184,27 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 return@launch
             }
 
+            val metadataBuilder = androidx.media3.common.MediaMetadata.Builder()
+            
+            // Título: Prioridad Info > Nombre de archivo > Default
+            val title = notificationInfo?.title ?: getFileNameFromUri(uri) ?: "Video Player"
+            metadataBuilder.setTitle(title)
+            metadataBuilder.setArtist(notificationInfo?.artist ?: "OwnVideoPlayer")
+
+            // Foto: Prioridad Info > Frame de video
+            if (notificationInfo?.photoUrl != null) {
+                metadataBuilder.setArtworkUri(notificationInfo.photoUrl.toUri())
+            } else {
+                val frameData = getFrameFromUri(uri)
+                if (frameData != null) {
+                    metadataBuilder.setArtworkData(frameData, androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                }
+            }
+
             val mediaItem = MediaItem.Builder()
                 .setUri(uri)
                 .setMediaId(uri.toString())
-                .setMediaMetadata(
-                    androidx.media3.common.MediaMetadata.Builder()
-                        .setTitle(notificationInfo?.title ?: "Video Player")
-                        .setArtist(notificationInfo?.artist ?: "OwnVideoPlayer")
-                        .setArtworkUri(notificationInfo?.photoUrl?.toUri() ?: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRTOcw9rP9JtQTdUaUoAtB0fuyrjU2R33C0v_pViPivO6FSl65HtssQOtv7&s=10".toUri())
-                        .build()
-                )
+                .setMediaMetadata(metadataBuilder.build())
                 .build()
             
             player.pause()
@@ -344,6 +355,71 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         progressJob = null
     }
 
+    private suspend fun getFrameFromUri(uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            when (uri.scheme) {
+                "http", "https" -> {
+                    retriever.setDataSource(uri.toString(), HashMap<String, String>())
+                }
+                "rawresource" -> {
+                    val resId = uri.path?.trim('/')?.toIntOrNull()
+                    if (resId != null) {
+                        val afd = getApplication<Application>().resources.openRawResourceFd(resId)
+                        retriever.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                        afd.close()
+                    } else {
+                        retriever.setDataSource(getApplication(), uri)
+                    }
+                }
+                else -> {
+                    retriever.setDataSource(getApplication(), uri)
+                }
+            }
+            
+            // Intentamos capturar el frame en el segundo 1, si falla, intentamos al inicio (0)
+            val bitmap = retriever.getFrameAtTime(1000000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.frameAtTime
+
+            val stream = java.io.ByteArrayOutputStream()
+            bitmap?.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, stream)
+            stream.toByteArray()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            try {
+                retriever.release()
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
+    private fun getFileNameFromUri(uri: Uri): String? {
+        return try {
+            when (uri.scheme) {
+                "file", "content" -> uri.lastPathSegment
+                "rawresource" -> {
+                    val resId = uri.path?.trim('/')?.toIntOrNull()
+                    if (resId != null) {
+                        getApplication<Application>().resources.getResourceEntryName(resId)
+                            .replaceFirstChar { it.uppercase() }
+                    } else null
+                }
+                "android.resource" -> uri.lastPathSegment
+                else -> {
+                    if (uri.scheme?.startsWith("http") == true) {
+                        uri.pathSegments.lastOrNull()?.substringBeforeLast('.')
+                    } else null
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         stopPlayback()
@@ -373,7 +449,7 @@ data class VideoPlayerUiState(
 )
 
 data class NotificationInfo(
-    val title: String,
-    val artist: String,
-    val photoUrl: String
+    val title: String? = null,
+    val artist: String? = null,
+    val photoUrl: String? = null
 )

@@ -39,12 +39,13 @@ android {
 publishing {
     publications {
         register<MavenPublication>("release") {
-            afterEvaluate {
-                from(components["release"])
-            }
             groupId = "com.danwolve"
             artifactId = "ownvideoplayer"
             version = "1.0"
+
+            afterEvaluate {
+                from(components["release"])
+            }
         }
     }
 }
@@ -53,6 +54,7 @@ dependencies {
     // Core & Lifecycle
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.android)
 
