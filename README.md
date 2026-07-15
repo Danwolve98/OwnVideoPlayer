@@ -59,16 +59,6 @@ For media notifications to work correctly, add the permissions and service to yo
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
-<!-- Playback Service -->
-<service  
-  android:name="com.danwolve.ownvideoplayer.player.PlaybackService"  
-  android:exported="true"  
-  android:foregroundServiceType="mediaPlayback">  
-  <intent-filter>  
-	  <action android:name="androidx.media3.session.MediaSessionService" />  
-  </intent-filter>  
-</service>
 ```
 
 ---
