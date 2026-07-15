@@ -57,7 +57,8 @@ fun Context.findActivity(): Activity? = when (this) {
  * @param source Fuente del video (URL o Recurso Raw).
  * @param modifier Modificador para el contenedor del reproductor.
  * @param notificationInfo Información opcional para la notificación de medios.
- * @param isControlsEnabled Si los controles están habilitados.
+ * @param showControls Si los controles y overlays (error, buffering) están habilitados.
+ * @param repeatMode Si el video debe repetirse en bucle al finalizar.
  * @param fullScreenMode Modo de pantalla completa (Diálogo o ocultar UI del sistema).
  */
 @Composable
@@ -65,7 +66,8 @@ fun OwnVideoPlayer(
     source: VideoSource,
     modifier: Modifier = Modifier,
     notificationInfo: NotificationInfo? = null,
-    isControlsEnabled: Boolean = true,
+    showControls: Boolean = true,
+    repeatMode: Boolean = false,
     fullScreenMode: FullScreenMode = FullScreenMode.SYSTEM_UI
 ) {
     val viewModel: VideoPlayerViewModel = viewModel(key = source.toString())
@@ -79,6 +81,10 @@ fun OwnVideoPlayer(
         }
     }
 
+    LaunchedEffect(repeatMode, player) {
+        viewModel.setRepeatMode(repeatMode)
+    }
+
     OwnVideoPlayerBase(
         modifier = modifier,
         player = player,
@@ -89,7 +95,7 @@ fun OwnVideoPlayer(
         onSeek = { viewModel.seekTo(it) },
         onToggleFullScreen = { viewModel.toggleFullScreen() },
         onToggleControls = { viewModel.toggleControls() },
-        isControlsEnabled = isControlsEnabled,
+        showControls = showControls,
         fullScreenMode = fullScreenMode
     )
 }
@@ -107,7 +113,7 @@ fun OwnVideoPlayerBase(
     onToggleFullScreen: () -> Unit,
     onToggleControls: () -> Unit,
     onClose: (() -> Unit)? = null,
-    isControlsEnabled: Boolean = true,
+    showControls: Boolean = true,
     fullScreenMode: FullScreenMode = FullScreenMode.SYSTEM_UI
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -140,7 +146,7 @@ fun OwnVideoPlayerBase(
                 .background(Color.Black)
                 .animateContentSize()
                 .then(
-                    if (isControlsEnabled) {
+                    if (showControls) {
                         Modifier.clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -173,7 +179,7 @@ fun OwnVideoPlayerBase(
             }
 
             // Error Layer for Integrated View
-            if (uiState.errorMessage != null && !isInsideDialog && !uiState.isPlaying) {
+            if (showControls && uiState.errorMessage != null && !isInsideDialog && !uiState.isPlaying) {
                 Column(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -193,7 +199,7 @@ fun OwnVideoPlayerBase(
                 }
             }
 
-            if (uiState.isBuffering && uiState.errorMessage == null) {
+            if (showControls && uiState.isBuffering && uiState.errorMessage == null) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center),
                     color = Color.Red
@@ -201,7 +207,7 @@ fun OwnVideoPlayerBase(
             }
 
             // UI Layer
-            if (isControlsEnabled) {
+            if (showControls) {
                 OwnVideoControlsOverlay(
                     visible = uiState.isControlsVisible,
                     uiState = uiState,
@@ -306,8 +312,13 @@ fun OwnVideoControlsOverlay(
                     Icon(Icons.Rounded.Replay10, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
                 }
                 IconButton(onClick = onPlayPause) {
+                    val playIcon = when {
+                        uiState.playbackState == androidx.media3.common.Player.STATE_ENDED -> Icons.Rounded.Replay
+                        uiState.playWhenReady -> Icons.Rounded.Pause
+                        else -> Icons.Rounded.PlayArrow
+                    }
                     Icon(
-                        if (uiState.playWhenReady) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        playIcon,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(56.dp)

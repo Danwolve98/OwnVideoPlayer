@@ -38,14 +38,16 @@ import com.danwolve.ownvideoplayer.player.VideoPlayerViewModel
  * @param show Controla la visibilidad del diálogo.
  * @param source La fuente del video (URL o recurso Raw).
  * @param onDismiss Callback cuando el diálogo se cierra.
+ * @param repeatMode Si el video debe repetirse en bucle al finalizar.
  * @param notificationInfo Información opcional para la notificación de reproducción.
  */
 @Composable
 fun OwnVideoPlayerDialog(
     show: Boolean,
     source: VideoSource,
-    onDismiss: () -> Unit,
+    repeatMode: Boolean = false,
     notificationInfo: NotificationInfo? = null,
+    onDismiss: () -> Unit,
 ) {
     if (!show) return
 
@@ -62,6 +64,10 @@ fun OwnVideoPlayerDialog(
             is VideoSource.Raw -> viewModel.loadRawResource(source.resId, notificationInfo)
         }
         viewModel.setFullScreen(enabled = true)
+    }
+
+    LaunchedEffect(repeatMode, player) {
+        viewModel.setRepeatMode(repeatMode)
     }
 
     // Manejo de errores mediante Snackbar

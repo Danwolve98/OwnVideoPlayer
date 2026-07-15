@@ -39,6 +39,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var bufferingWatchdogJob: Job? = null
     private var isFirstLoad = true
     private var lastUri: Uri? = null
+    private var pendingRepeatMode: Boolean = false
 
     init {
         initializeController()
@@ -59,6 +60,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun setupPlayerListener(player: Player) {
+        player.repeatMode = if (pendingRepeatMode) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
         player.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
                 if (events.containsAny(Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_PLAY_WHEN_READY_CHANGED)) {
@@ -231,7 +233,12 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         } else {
             player?.let {
-                if (it.playWhenReady) it.pause() else it.play()
+                if (it.playbackState == Player.STATE_ENDED) {
+                    it.seekTo(0)
+                    it.play()
+                } else {
+                    if (it.playWhenReady) it.pause() else it.play()
+                }
             }
         }
         resetControlsTimer()
@@ -281,6 +288,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun setRepeatMode(enabled: Boolean) {
+        pendingRepeatMode = enabled
         player?.repeatMode = if (enabled) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
     }
 
