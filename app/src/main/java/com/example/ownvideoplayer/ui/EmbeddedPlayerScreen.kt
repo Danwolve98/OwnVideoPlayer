@@ -44,9 +44,9 @@ fun EmbeddedPlayerContent() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Reproductor integrado - ¡Ahora sin necesidad de ViewModel externo!
+            // Reproductor integrado
             OwnVideoPlayer(
-                source = VideoSource.Url("https://museusvalenciapre.grupotecopy.es/sites/default/files/2024-10/BEACON%2050%20%2B%20%20Audio%20Benlliure%2042%20%2B%20IMG.mp4"),
+                source = VideoSource.Url("YOUR_URL"),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(250.dp),
@@ -70,6 +70,7 @@ fun EmbeddedPlayerContent() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)
 @Composable
 fun EmbeddedPlayerScreenPreview() {
@@ -77,7 +78,6 @@ fun EmbeddedPlayerScreenPreview() {
         // Usamos OwnVideoPlayerBase para la preview ya que permite pasar un estado mock
         Scaffold(
             topBar = {
-                @OptIn(ExperimentalMaterial3Api::class)
                 TopAppBar(title = { Text("App Tab Example Preview") })
             }
         ) { padding ->

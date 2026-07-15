@@ -76,11 +76,11 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 val message = when (error.errorCode) {
                     androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "No tienes conexión a internet"
-                    androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "Error de hardware: No se puede decodificar el video"
-                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "El archivo de video no existe"
-                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "Error del servidor (HTTP ${error.errorCode})"
-                    else -> "Error al cargar el video: ${error.errorCodeName}"
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "No internet connection"
+                    androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "Hardware error: Could not decode video"
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "Video file does not exist"
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "Server error (HTTP ${error.errorCode})"
+                    else -> "Error loading video: ${error.errorCodeName}"
                 }
                 _uiState.update { it.copy(errorMessage = message, isBuffering = false) }
                 
@@ -182,7 +182,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
             // Solo comprobamos internet si vamos a cargar un video nuevo y es remoto
             if (uri.scheme?.startsWith("http") == true && !isNetworkAvailable()) {
-                _uiState.update { it.copy(errorMessage = "No tienes conexión a internet", isBuffering = false) }
+                _uiState.update { it.copy(errorMessage = "No internet connection", isBuffering = false) }
                 return@launch
             }
 

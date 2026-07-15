@@ -347,7 +347,7 @@ fun OwnVideoControlsOverlay(
             ) {
                 if (onClose != null) {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Cerrar", tint = Color.White)
+                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
                     }
                 } else {
                     Spacer(modifier = Modifier.width(48.dp))
