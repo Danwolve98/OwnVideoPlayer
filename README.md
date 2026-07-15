@@ -1,9 +1,10 @@
 # OwnVideoPlayer
 
-![OwnMediaPlayer](https://raw.githubusercontent.com/Danwolve98/OwnMediaPlayer/main/own_media_player/src/main/res/drawable/own_media_player.png)
+<img width="500" height="500" alt="Imagen libro televisión 15 jul 2026" src="https://github.com/user-attachments/assets/f7d55396-46dd-4b07-af5f-dd0c10f48591" />
 
-[![JitPackVersion](https://jitpack.io/v/Danwolve98/OwnMediaPlayer.svg)](https://jitpack.io/#Danwolve98/OwnMediaPlayer)
-![GitHub last commit](https://img.shields.io/github/last-commit/Danwolve98/OwnMediaPlayer?style=for-the-badge&logo=github)
+
+[![JitPackVersion](https://jitpack.io/v/Danwolve98/OwnVideoPlayer.svg)](https://jitpack.io/#Danwolve98/OwnVideoPlayer)
+![GitHub last commit](https://img.shields.io/github/last-commit/Danwolve98/OwnVideoPlayer?style=for-the-badge&logo=github)
 
 **OwnVideoPlayer** is a powerful and extremely simple library for playing videos on Android using **Media3**. It is designed to be "plug & play", automatically managing state, media notifications, and the user interface.
 
