@@ -1,3 +1,4 @@
+
 # OwnVideoPlayer
 
 <img width="500" height="500" alt="Imagen libro televisión 15 jul 2026" src="https://github.com/user-attachments/assets/f7d55396-46dd-4b07-af5f-dd0c10f48591" />
@@ -7,6 +8,17 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/Danwolve98/OwnVideoPlayer?style=for-the-badge&logo=github)
 
 **OwnVideoPlayer** is a powerful and extremely simple library for playing videos on Android using **Media3**. It is designed to be "plug & play", automatically managing state, media notifications, and the user interface.
+
+---
+
+<center><img width="450" height="937" alt="Screenshot_4" src="https://github.com/user-attachments/assets/2d47fb01-db4d-47e7-8436-fb56c01d89ea" />  </center>
+
+<br>
+<img width="450" height="800" alt="Screen_recording_20260715_135129-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/b29ecb2e-bfae-455a-b9d8-9548583fbaf6" />
+
+<img width="450" height="800" alt="Screen_recording_20260715_135129-ezgif com-crop" src="https://github.com/user-attachments/assets/b3f525a6-955c-44ff-9471-c2a7908ed8b9" />
+
+<img width="900" height="450" alt="Screen_recording_20260715_135129-ezgif com-crop (1)" src="https://github.com/user-attachments/assets/48aeaf4e-bbe3-4a1f-9af4-6b368516a425" />
 
 ---
 
@@ -117,4 +129,4 @@ OwnVideoPlayer(
 ---
 
 ### 📄 License
-OwnVideoPlayer is under the MIT license. See the [LICENSE.txt](https://github.com/Danwolve98/OwnMediaPlayer/blob/main/LICENSE) file for more information.
+OwnVideoPlayer is under the MIT license. See the [LICENSE.txt](https://github.com/Danwolve98/OwnVideoPlayer/blob/main/LICENSE) file for more information.
