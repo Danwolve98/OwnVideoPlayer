@@ -84,7 +84,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
                 _uiState.update { it.copy(errorMessage = message, isBuffering = false) }
                 
-                // On fatal error, try to reset player state
+                // En caso de error fatal, intentar resetear el estado del reproductor
                 player.prepare()
             }
 
@@ -139,7 +139,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
 
             override fun onTracksChanged(tracks: Tracks) {
-                // Quality selection removed
+                // Selección de calidad eliminada
             }
 
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
@@ -157,7 +157,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         lastUri = uri
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            // Wait for player to be available with a timeout
+            // Esperar a que el reproductor esté disponible con un tiempo límite
             var attempts = 0
             while (_playerFlow.value == null && attempts < 50) {
                 delay(100.milliseconds)
@@ -309,11 +309,11 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun startBufferingWatchdog() {
         bufferingWatchdogJob?.cancel()
         bufferingWatchdogJob = viewModelScope.launch {
-            delay(10000.milliseconds) // Give it 10 seconds
+            delay(10000.milliseconds) // Dar 10 segundos
             if (_uiState.value.isBuffering) {
                 player?.let { p ->
                     if (p.playbackState == Player.STATE_BUFFERING) {
-                        p.prepare() // Re-prepare to try and kick-start it
+                        p.prepare() // Volver a preparar para intentar arrancarlo
                     }
                 }
             }
@@ -367,22 +367,15 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         val retriever = android.media.MediaMetadataRetriever()
         try {
             when (uri.scheme) {
-                "http", "https" -> {
-                    retriever.setDataSource(uri.toString(), HashMap<String, String>())
-                }
+                "http", "https" -> retriever.setDataSource(uri.toString(), HashMap())
                 "rawresource" -> {
-                    val resId = uri.path?.trim('/')?.toIntOrNull()
-                    if (resId != null) {
-                        val afd = getApplication<Application>().resources.openRawResourceFd(resId)
-                        retriever.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                        afd.close()
-                    } else {
-                        retriever.setDataSource(getApplication(), uri)
-                    }
+                    uri.path?.trim('/')?.toIntOrNull()?.let { resId ->
+                        getApplication<Application>().resources.openRawResourceFd(resId).use { afd ->
+                            retriever.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                        }
+                    } ?: retriever.setDataSource(getApplication(), uri)
                 }
-                else -> {
-                    retriever.setDataSource(getApplication(), uri)
-                }
+                else -> retriever.setDataSource(getApplication(), uri)
             }
             
             // Intentamos capturar el frame en el segundo 1, si falla, intentamos al inicio (0)
@@ -390,42 +383,32 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 ?: retriever.getFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: retriever.frameAtTime
 
-            val stream = java.io.ByteArrayOutputStream()
-            bitmap?.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, stream)
-            stream.toByteArray()
+            java.io.ByteArrayOutputStream().use { stream ->
+                bitmap?.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, stream)
+                stream.toByteArray()
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         } finally {
-            try {
-                retriever.release()
-            } catch (e: Exception) {
-                // Ignore
-            }
+            try { retriever.release() } catch (ignored: Exception) {}
         }
     }
 
-    private fun getFileNameFromUri(uri: Uri): String? {
-        return try {
-            when (uri.scheme) {
-                "file", "content" -> uri.lastPathSegment
-                "rawresource" -> {
-                    val resId = uri.path?.trim('/')?.toIntOrNull()
-                    if (resId != null) {
-                        getApplication<Application>().resources.getResourceEntryName(resId)
-                            .replaceFirstChar { it.uppercase() }
-                    } else null
-                }
-                "android.resource" -> uri.lastPathSegment
-                else -> {
-                    if (uri.scheme?.startsWith("http") == true) {
-                        uri.pathSegments.lastOrNull()?.substringBeforeLast('.')
-                    } else null
+    private fun getFileNameFromUri(uri: Uri): String? = try {
+        when (uri.scheme) {
+            "file", "content" -> uri.lastPathSegment
+            "rawresource" -> {
+                uri.path?.trim('/')?.toIntOrNull()?.let { resId ->
+                    getApplication<Application>().resources.getResourceEntryName(resId)
+                        .replaceFirstChar { it.uppercase() }
                 }
             }
-        } catch (e: Exception) {
-            null
+            "android.resource" -> uri.lastPathSegment
+            "http", "https" -> uri.pathSegments.lastOrNull()?.substringBeforeLast('.')
+            else -> null
         }
+    } catch (e: Exception) {
+        null
     }
 
     override fun onCleared() {

@@ -1,6 +1,5 @@
 package com.danwolve.ownvideoplayer.ui
 
-import androidx.annotation.RawRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -77,7 +76,7 @@ fun OwnVideoPlayerDialog(
         }
     }
 
-    // Manejo de System UI (Barras de estado y navegación)
+    // Manejo de la Interfaz del Sistema (Barras de estado y navegación)
     val controller = remember {
         val window = (view.context as? android.app.Activity)?.window
         window?.let { WindowCompat.getInsetsController(it, view) }
