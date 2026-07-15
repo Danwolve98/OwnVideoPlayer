@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.danwolve.ownvideoplayer.player.NotificationInfo
 import com.danwolve.ownvideoplayer.ui.OwnVideoPlayerDialog
 import com.danwolve.ownvideoplayer.ui.VideoSource
 import com.example.ownvideoplayer.R
@@ -21,6 +22,7 @@ fun VideoPlayerScreen(
         onDismiss = {
             showPlayer = false
             onDismiss()
-        }
+        },
+        notificationInfo = NotificationInfo()
     )
 }
